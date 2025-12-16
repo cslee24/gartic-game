@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>릴레이 그림 & 추측 게임 (Gartic Style)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter (깔끔한 폰트) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* 캔버스 기본 스타일 */
+        #drawingCanvas {
+            border: 2px solid #3b82f6;
+            cursor: crosshair;
+            touch-action: none; /* 터치 이벤트 처리를 위해 기본 스크롤 동작 방지 */
+            background-color: white;
+        }
+        .step-card {
+            background-color: #f3f4f6;
+            border-left: 4px solid #3b82f6;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-blue-700">릴레이 그림 & 추측 게임</h1>
+            <p class="text-gray-500 mt-2">글로 시작해서 그림으로, 그림에서 글로 이어지는 릴레이 퀴즈 게임</p>
+        </header>
+
+        <!-- 로딩 및 오류 메시지 -->
+        <div id="messageBox" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg shadow mb-6 hidden">
+            <p id="messageText" class="font-medium">로딩 중...</p>
+        </div>
+
+        <!-- 메인 콘텐츠 영역 -->
+        <div id="content" class="bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+            <!-- 인증 및 초기화 상태 -->
+            <div id="initStatus" class="text-center">
+                <p class="text-lg text-gray-600">게임 데이터 초기화 및 인증 중...</p>
+                <div class="mt-4"><svg class="animate-spin h-8 w-8 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>
+            </div>
+
+            <!-- 방 선택/생성 뷰 (New) -->
+            <div id="roomSelectionView" class="hidden text-center">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">방 선택</h2>
+
+                <!-- 방 생성 -->
+                <div class="mb-8 p-6 border-2 border-blue-200 rounded-xl bg-blue-50 shadow-md">
+                    <h3 class="text-xl font-semibold mb-3 text-blue-700">방 만들기 (방장)</h3>
+                    <button id="createRoomBtn" class="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition duration-150 shadow-lg">
+                        새로운 방 만들기
+                    </button>
+                </div>
+
+                <!-- 방 참여 -->
+                <div class="p-6 border-2 border-gray-300 rounded-xl bg-white shadow-md">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-700">방 참여</h3>
+                    <input type="text" id="joinRoomIdInput" placeholder="참여할 방 ID (예: 1234)" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 mb-2">
+                    <button id="joinRoomBtn" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-150 shadow-lg" disabled>
+                        방 참여하기
+                    </button>
+                </div>
+            </div>
+
+            <!-- 게임 로비 및 시작 화면 -->
+            <div id="lobbyView" class="hidden">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">게임 로비</h2>
+                
+                <!-- 방 정보 및 링크 공유 -->
+                <div class="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200 shadow-inner">
+                    <p class="font-semibold text-indigo-700 mb-2">현재 방 ID: <span id="roomIdDisplay" class="font-mono bg-indigo-200 px-2 py-1 rounded text-lg"></span></p>
+                    <p class="text-sm text-gray-500 mb-2">사용자 ID: <span id="userIdDisplay" class="font-mono text-xs"></span></p>
+
+                    <div id="linkShareSection" class="mt-3">
+                        <input type="text" id="roomLinkInput" class="w-full p-2 border border-indigo-300 rounded-lg bg-white text-sm" readonly>
+                        <button id="copyLinkBtn" class="mt-2 w-full bg-indigo-500 text-white p-2 rounded-lg hover:bg-indigo-600 transition duration-150 shadow-md">
+                            🔗 참여 링크 복사
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label for="userNameInput" class="block text-sm font-medium text-gray-700 mb-1">닉네임 설정:</label>
+                    <input type="text" id="userNameInput" placeholder="닉네임을 입력하세요" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <button id="setUserNameBtn" class="mt-2 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-150 shadow-md">닉네임 저장</button>
+                </div>
+
+                <h3 class="text-xl font-semibold mb-2">참가자 (<span id="userCount">0</span>명)</h3>
+                <ul id="userList" class="space-y-2 mb-6 p-3 bg-gray-50 rounded-lg max-h-40 overflow-y-auto">
+                    <!-- 참가자 목록 -->
+                </ul>
+
+                <button id="startGameBtn" class="w-full bg-green-500 text-white p-4 text-lg rounded-xl hover:bg-green-600 transition duration-150 shadow-lg" disabled>
+                    게임 시작 (방장 전용)
+                </button>
+            </div>
+
+            <!-- 프롬프트 입력 단계 -->
+            <div id="promptView" class="hidden">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">1단계: 첫 문장 쓰기</h2>
+                <p class="mb-4 text-gray-600">재미있고 예측 불가능한 결과를 만들 수 있는 문장을 입력하세요.</p>
+                <textarea id="initialPromptInput" rows="3" class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-blue-500 focus:border-blue-500" placeholder="예: 우주복을 입은 고양이가 피자를 굽고 있다"></textarea>
+                <button id="submitPromptBtn" class="mt-4 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-150 shadow-md" disabled>문장 제출</button>
+            </div>
+
+            <!-- 게임 플레이 단계 (그림 또는 추측) -->
+            <div id="gameView" class="hidden">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800"><span id="roundTitle"></span></h2>
+                <div id="taskDescription" class="mb-4 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
+                    <!-- 현재 라운드의 작업 내용 표시 -->
+                </div>
+
+                <!-- 그림 그리기 영역 -->
+                <div id="drawingTask" class="hidden">
+                    <p class="text-lg font-semibold mb-2">그려야 할 문장:</p>
+                    <p id="textToDraw" class="mb-4 p-3 bg-gray-100 rounded-lg text-xl font-medium text-center"></p>
+
+                    <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                        <input type="color" id="colorPicker" value="#000000" class="w-12 h-12 rounded-full border-2 border-gray-300">
+                        <input type="range" id="brushSize" min="2" max="30" value="5" class="w-full sm:w-1/3">
+                        <span id="brushSizeDisplay" class="font-mono text-gray-600 self-center">5px</span>
+                        <button id="clearCanvasBtn" class="flex-grow bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-150 shadow-md">지우기</button>
+                    </div>
+
+                    <canvas id="drawingCanvas" class="w-full rounded-lg shadow-inner"></canvas>
+                    <button id="submitDrawingBtn" class="mt-4 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-150 shadow-md" disabled>그림 제출</button>
+                </div>
+
+                <!-- 추측 입력 영역 -->
+                <div id="guessingTask" class="hidden">
+                    <p class="text-lg font-semibold mb-2">무엇을 그린 걸까요?</p>
+                    <div id="imageToGuessContainer" class="mb-4 flex justify-center p-4 bg-gray-100 rounded-lg">
+                        <img id="imageToGuess" class="max-w-full h-auto rounded-lg border border-gray-300" alt="추측해야 할 그림">
+                    </div>
+                    <textarea id="guessInput" rows="2" class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-blue-500 focus:border-blue-500" placeholder="이 그림이 무엇인지 추측하여 문장으로 입력하세요."></textarea>
+                    <button id="submitGuessBtn" class="mt-4 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-150 shadow-md" disabled>추측 제출</button>
+                </div>
+
+                <!-- 대기 중 메시지 -->
+                <div id="waitingMessage" class="hidden text-center p-8 bg-indigo-50 rounded-lg border-2 border-indigo-200">
+                    <p class="text-xl font-bold text-indigo-700">제출 완료! 다른 플레이어를 기다리는 중...</p>
+                    <div class="mt-4"><svg class="animate-pulse h-6 w-6 text-indigo-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                </div>
+
+            </div>
+
+            <!-- 결과 발표 단계 -->
+            <div id="revealView" class="hidden">
+                <h2 class="text-3xl font-bold mb-6 text-green-700 text-center">🎉 게임 결과 발표 🎉</h2>
+                <div id="revealContainer" class="space-y-8">
+                    <!-- 릴레이 결과가 여기에 동적으로 표시됩니다. -->
+                </div>
+                <div class="mt-8 text-center">
+                    <button id="newGameBtn" class="bg-indigo-500 text-white p-3 rounded-lg hover:bg-indigo-600 transition duration-150 shadow-md">새 게임 시작</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, query, runTransaction, getDoc, arrayUnion, arrayRemove, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firestore 로깅 설정 (디버깅용)
+        setLogLevel('Debug');
+
+        // --- 전역 상수 및 변수 ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-gartic-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId = null;
+        let userName = '';
+        let roomRef = null;
+        let roomId = null; // 동적으로 할당됨
+
+        // 캔버스 관련 변수
+        let canvas, ctx;
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentColor = '#000000';
+        let currentBrushSize = 5;
+
+        // --- DOM 요소 참조 ---
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const initStatus = document.getElementById('initStatus');
+        const roomSelectionView = document.getElementById('roomSelectionView'); // New
+        const lobbyView = document.getElementById('lobbyView');
+        const promptView = document.getElementById('promptView');
+        const gameView = document.getElementById('gameView');
+        const revealView = document.getElementById('revealView');
+
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const joinRoomIdInput = document.getElementById('joinRoomIdInput');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const roomIdDisplay = document.getElementById('roomIdDisplay');
+        const roomLinkInput = document.getElementById('roomLinkInput');
+        const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+        const userNameInput = document.getElementById('userNameInput');
+        const setUserNameBtn = document.getElementById('setUserNameBtn');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const initialPromptInput = document.getElementById('initialPromptInput');
+        const submitPromptBtn = document.getElementById('submitPromptBtn');
+        const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+        const submitDrawingBtn = document.getElementById('submitDrawingBtn');
+        const submitGuessBtn = document.getElementById('submitGuessBtn');
+        const colorPicker = document.getElementById('colorPicker');
+        const brushSize = document.getElementById('brushSize');
+        const newGameBtn = document.getElementById('newGameBtn');
+
+        // --- 유틸리티 함수 ---
+
+        /**
+         * URL에서 방 ID 파라미터를 가져옵니다.
+         * @returns {string | null} 방 ID 문자열 또는 null
+         */
+        function getRoomIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('room');
+        }
+
+        /**
+         * 임의의 짧은 영숫자 방 ID를 생성합니다.
+         * @returns {string} 6자리 방 ID
+         */
+        function createUniqueRoomId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        /**
+         * 메시지 박스에 상태 메시지를 표시합니다.
+         * @param {string} msg - 표시할 메시지
+         * @param {string} type - 'error', 'info', 'success', 'warning' (기본값: info)
+         */
+        function showMessage(msg, type = 'info') {
+            const classes = {
+                'info': 'bg-blue-100 border-blue-500 text-blue-700',
+                'error': 'bg-red-100 border-red-500 text-red-700',
+                'success': 'bg-green-100 border-green-500 text-green-700',
+                'warning': 'bg-yellow-100 border-yellow-500 text-yellow-700',
+            };
+            messageBox.className = `p-4 rounded-lg shadow mb-6 border-l-4 ${classes[type]}`;
+            messageText.textContent = msg;
+            messageBox.classList.remove('hidden');
+        }
+
+        /**
+         * 화면 뷰를 전환합니다.
+         * @param {string} viewId - 표시할 뷰의 ID ('select', 'lobby', 'prompt', 'game', 'reveal')
+         */
+        function showView(viewId) {
+            roomSelectionView.classList.add('hidden'); // New
+            lobbyView.classList.add('hidden');
+            promptView.classList.add('hidden');
+            gameView.classList.add('hidden');
+            revealView.classList.add('hidden');
+
+            switch (viewId) {
+                case 'select': roomSelectionView.classList.remove('hidden'); break;
+                case 'lobby': lobbyView.classList.remove('hidden'); break;
+                case 'prompt': promptView.classList.remove('hidden'); break;
+                case 'game': gameView.classList.remove('hidden'); break;
+                case 'reveal': revealView.classList.remove('hidden'); break;
+            }
+        }
+
+        /**
+         * 현재 캔버스 내용을 base64 이미지 URL로 가져옵니다.
+         */
+        function getCanvasImage() {
+            return canvas.toDataURL('image/png');
+        }
+
+        /**
+         * base64 이미지 데이터를 캔버스에 로드합니다.
+         * @param {string} dataUrl - base64 이미지 데이터 URL
+         */
+        function loadDrawingOnCanvas(dataUrl) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // 기존 내용 지우기
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = dataUrl;
+        }
+
+
+        // --- 캔버스 드로잉 로직 ---
+
+        function setupCanvas() {
+            canvas = document.getElementById('drawingCanvas');
+            ctx = canvas.getContext('2d');
+
+            // 캔버스 크기를 부모 요소에 맞춥니다.
+            const resizeCanvas = () => {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = Math.min(rect.width * 0.75, 500); // 4:3 비율 또는 최대 500px
+            };
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // 캔버스 설정
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // 이벤트 핸들러
+            const getPos = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                let clientX, clientY;
+
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const pos = getPos(e);
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = currentBrushSize;
+                ctx.stroke();
+                [lastX, lastY] = [pos.x, pos.y];
+            };
+
+            const startDrawing = (e) => {
+                e.preventDefault(); // 스크롤/줌 방지 (터치)
+                isDrawing = true;
+                const pos = getPos(e);
+                [lastX, lastY] = [pos.x, pos.y];
+            };
+
+            const stopDrawing = () => {
+                isDrawing = false;
+            };
+
+            // PC 마우스 이벤트
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            // 모바일 터치 이벤트
+            canvas.addEventListener('touchstart', startDrawing);
+            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchend', stopDrawing);
+
+            // 캔버스 지우기
+            clearCanvasBtn.addEventListener('click', () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+
+            // 색상 및 굵기 설정
+            colorPicker.addEventListener('input', (e) => {
+                currentColor = e.target.value;
+            });
+            brushSize.addEventListener('input', (e) => {
+                currentBrushSize = parseInt(e.target.value);
+                document.getElementById('brushSizeDisplay').textContent = `${currentBrushSize}px`;
+            });
+        }
+
+
+        // --- Firebase 초기화 및 인증 ---
+
+        /**
+         * Firebase 초기화 및 인증 처리를 수행합니다.
+         */
+        async function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase 설정이 로드되지 않았습니다.");
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 초기 인증 상태 확인
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId;
+                        await loadUserData();
+                        
+                        initStatus.classList.add('hidden');
+                        
+                        // URL에서 방 ID 확인
+                        const urlRoomId = getRoomIdFromUrl();
+
+                        if (urlRoomId) {
+                            roomId = urlRoomId;
+                            showMessage(`방 ID ${roomId}로 접속 시도 중...`, 'info');
+                            setupRoomListener(); // 바로 로비로 진입 시도
+                        } else {
+                            // 방 ID가 없으면 방 선택 화면으로 이동
+                            showView('select');
+                        }
+
+                    } else {
+                        // 인증 토큰이 있으면 커스텀 토큰으로 로그인, 없으면 익명 로그인
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase 초기화/인증 오류:", error);
+                showMessage(`Firebase 초기화 실패: ${error.message}`, 'error');
+                initStatus.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Firestore에서 사용자 닉네임을 로드하거나 설정합니다.
+         */
+        async function loadUserData() {
+            const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/config`, 'profile');
+            const docSnap = await getDoc(userDocRef);
+
+            if (docSnap.exists()) {
+                userName = docSnap.data().name || `익명_${userId.substring(0, 4)}`;
+            } else {
+                userName = `익명_${userId.substring(0, 4)}`;
+                // 새 사용자이므로 Firestore에 기본 닉네임 저장
+                await setDoc(userDocRef, { name: userName });
+            }
+            userNameInput.value = userName;
+        }
+
+        /**
+         * 방 리스너를 설정하고 로비 화면으로 전환합니다.
+         */
+        function setupRoomListener() {
+            if (!roomId || !db) {
+                showMessage('방 ID 또는 Firebase가 설정되지 않았습니다.', 'error');
+                return;
+            }
+            
+            // 방 참조 설정
+            roomRef = doc(db, `artifacts/${appId}/public/data/rooms`, roomId);
+            roomIdDisplay.textContent = roomId;
+            
+            // 링크 생성
+            const roomLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+            roomLinkInput.value = roomLink;
+
+            showView('lobby');
+            setupCanvas(); // 캔버스 초기화 (게임 뷰가 필요할 수 있으므로 여기서 미리 설정)
+
+            onSnapshot(roomRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    await joinRoom(); // 데이터가 있으면 일단 참여 시도
+                    handleRoomUpdate(docSnap.data());
+                } else {
+                    // 방이 없으면 방 생성 화면으로 돌아가거나,
+                    // URL로 접속한 경우 방장에게 방 생성을 요청합니다.
+                    if (getRoomIdFromUrl() === roomId) {
+                        showMessage('접속하려는 방이 존재하지 않습니다. 새로 생성하거나 ID를 확인하세요.', 'error');
+                        showView('select');
+                    } else {
+                        // 새로 만든 경우만 자동 생성
+                        // 이미 lobbyView에 있으므로, joinRoom이 roomRef를 만들 때까지 대기
+                    }
+                }
+            }, (error) => {
+                console.error("Firestore 리스너 오류:", error);
+                showMessage("실시간 데이터 수신 오류.", 'error');
+                showView('select');
+            });
+        }
+
+        /**
+         * Firestore 방 데이터 업데이트를 처리하고 UI를 변경합니다.
+         * @param {object} roomData - Firestore에서 받은 방 데이터
+         */
+        function handleRoomUpdate(roomData) {
+            const { users = [], state, currentRound = 0, hostId, books = [] } = roomData;
+
+            const isHost = hostId === userId;
+            const currentUser = users.find(u => u.id === userId);
+            const isReady = currentUser && currentUser.isReady;
+
+            // 1. 사용자 목록 업데이트
+            renderUserList(users, hostId);
+            
+            // 방장만 게임 시작 가능
+            startGameBtn.disabled = !isHost || users.length < 2 || users.some(u => !u.isReady); 
+            startGameBtn.textContent = isHost ? "게임 시작" : `게임 시작 (${isHost ? '대기 중' : '방장 대기 중'})`;
+
+            // 2. 게임 상태에 따른 뷰 전환
+            switch (state) {
+                case 'lobby':
+                    showView('lobby');
+                    if (currentUser && !currentUser.isReady) {
+                        showMessage('닉네임을 설정하고 준비 완료 버튼을 누르세요.', 'info');
+                    } else if (currentUser && currentUser.isReady) {
+                        showMessage('모든 플레이어가 준비되면 방장이 게임을 시작합니다.', 'info');
+                    }
+                    break;
+
+                case 'prompt':
+                    showView('prompt');
+                    // 이미 프롬프트를 제출했는지 확인
+                    const hasSubmittedPrompt = books.some(b => b.starterId === userId);
+                    if (hasSubmittedPrompt) {
+                        submitPromptBtn.disabled = true;
+                        submitPromptBtn.textContent = "문장 제출 완료 (대기 중)";
+                        initialPromptInput.disabled = true;
+                        showMessage('다른 플레이어들이 문장을 제출할 때까지 기다리세요.', 'info');
+                    } else {
+                        submitPromptBtn.disabled = initialPromptInput.value.trim().length === 0;
+                        submitPromptBtn.textContent = "문장 제출";
+                        initialPromptInput.disabled = false;
+                        showMessage('첫 문장을 입력하고 제출하세요.', 'info');
+                    }
+                    break;
+
+                case 'drawing':
+                case 'guessing':
+                    showView('game');
+                    handleGameTask(roomData); // 게임 플레이 로직 처리
+                    break;
+
+                case 'reveal':
+                    showView('reveal');
+                    renderRevealView(books, users); // 결과 화면 표시
+                    break;
+            }
+        }
+
+        /**
+         * 사용자 목록을 렌더링합니다.
+         * @param {Array<Object>} users - 사용자 객체 배열
+         * @param {string} hostId - 방장 ID
+         */
+        function renderUserList(users, hostId) {
+            const userList = document.getElementById('userList');
+            document.getElementById('userCount').textContent = users.length;
+            userList.innerHTML = '';
+            users.forEach(user => {
+                const li = document.createElement('li');
+                const isMe = user.id === userId;
+                const isHost = user.id === hostId;
+                const statusIcon = user.isReady ? '✅' : '⏳';
+                const statusText = user.isReady ? '준비 완료' : '준비 중';
+
+                li.className = `p-2 rounded-lg flex justify-between items-center ${isMe ? 'bg-blue-50' : 'bg-white'}`;
+                li.innerHTML = `
+                    <span class="font-semibold">${user.name} ${isMe ? '(나)' : ''} ${isHost ? '👑' : ''}</span>
+                    <span class="text-sm text-gray-500">${statusIcon} ${statusText}</span>
+                `;
+                userList.appendChild(li);
+            });
+        }
+
+        /**
+         * 현재 라운드의 게임 태스크 (그림 또는 추측)를 처리하고 UI를 업데이트합니다.
+         * @param {object} roomData - 현재 방 데이터
+         */
+        function handleGameTask(roomData) {
+            const { users, state, currentRound, books } = roomData;
+            const userIds = users.map(u => u.id);
+            const userIndex = userIds.indexOf(userId);
+
+            if (userIndex === -1) {
+                showMessage('게임에 참여할 수 없습니다.', 'error');
+                return;
+            }
+
+            // 내가 맡아야 할 책 (Book)의 인덱스를 계산합니다.
+            const targetBookStarterIndex = (userIndex - currentRound + userIds.length) % userIds.length;
+            const targetStarterId = userIds[targetBookStarterIndex];
+            const targetBook = books.find(b => b.starterId === targetStarterId);
+
+            if (!targetBook) {
+                showMessage('할당된 책을 찾을 수 없습니다. (모든 플레이어가 프롬프트를 제출했는지 확인하세요.)', 'warning');
+                return;
+            }
+
+            const lastEntry = targetBook.chain[targetBook.chain.length - 1];
+            const bookReady = targetBook.chain.length === currentRound + 1; // 내 차례까지 완료된 상태
+
+            document.getElementById('roundTitle').textContent = `${currentRound + 1} 라운드: ${state === 'drawing' ? '그림 그리기' : '추측하기'}`;
+            document.getElementById('taskDescription').innerHTML = `
+                <p class="font-bold">당신의 책: <span class="text-blue-600">${targetBook.starterName}</span>님이 시작한 이야기</p>
+                <p class="text-sm text-gray-500">현재까지 진행: ${targetBook.chain.length} / ${users.length} 단계</p>
+            `;
+
+            document.getElementById('drawingTask').classList.add('hidden');
+            document.getElementById('guessingTask').classList.add('hidden');
+            document.getElementById('waitingMessage').classList.add('hidden');
+
+            if (bookReady) {
+                // 이미 현재 라운드 작업을 완료함 (다른 플레이어 대기)
+                document.getElementById('waitingMessage').classList.remove('hidden');
+                showMessage('이번 라운드의 작업을 완료했습니다. 다른 플레이어를 기다리는 중...', 'info');
+                return;
+            }
+
+            // 내 차례 작업 수행
+            if (state === 'drawing') {
+                // 직전 항목은 반드시 'text'여야 합니다.
+                if (lastEntry.type !== 'text') {
+                    showMessage('게임 상태 오류: 그림을 그려야 하는데 이전 항목이 텍스트가 아닙니다.', 'error');
+                    return;
+                }
+                document.getElementById('drawingTask').classList.remove('hidden');
+                document.getElementById('textToDraw').textContent = `"${lastEntry.content}"`;
+                submitDrawingBtn.disabled = false;
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // 새 그림을 위해 캔버스 초기화
+                showMessage('위에 제시된 문장을 보고 캔버스에 그림을 그리세요.', 'warning');
+
+            } else if (state === 'guessing') {
+                // 직전 항목은 반드시 'drawing'이어야 합니다.
+                if (lastEntry.type !== 'drawing') {
+                    showMessage('게임 상태 오류: 추측해야 하는데 이전 항목이 그림이 아닙니다.', 'error');
+                    return;
+                }
+                document.getElementById('guessingTask').classList.remove('hidden');
+                loadDrawingOnCanvas(lastEntry.content);
+                document.getElementById('imageToGuessContainer').classList.remove('hidden');
+                submitGuessBtn.disabled = guessInput.value.trim().length === 0;
+                showMessage('제시된 그림을 보고 무엇인지 추측하여 문장으로 입력하세요.', 'warning');
+            }
+        }
+
+        /**
+         * 결과 화면을 렌더링합니다.
+         * @param {Array<Object>} books - 최종 결과 책 배열
+         * @param {Array<Object>} users - 사용자 목록
+         */
+        function renderRevealView(books, users) {
+            const container = document.getElementById('revealContainer');
+            container.innerHTML = '';
+
+            books.forEach(book => {
+                const starter = users.find(u => u.id === book.starterId) || { name: '알 수 없음' };
+                const bookDiv = document.createElement('div');
+                bookDiv.className = 'p-6 border-2 border-gray-200 rounded-xl shadow-lg';
+                bookDiv.innerHTML = `<h3 class="text-2xl font-bold mb-4 text-purple-700">📚 ${starter.name}님의 책: </h3>`;
+
+                book.chain.forEach((entry, index) => {
+                    const creator = users.find(u => u.id === entry.creatorId) || { name: '알 수 없음' };
+                    const card = document.createElement('div');
+                    card.className = 'step-card';
+
+                    if (entry.type === 'text') {
+                        card.innerHTML = `
+                            <p class="font-semibold text-gray-700">Step ${index + 1}. 문장 (by ${creator.name})</p>
+                            <p class="text-xl mt-1 italic">"${entry.content}"</p>
+                        `;
+                    } else if (entry.type === 'drawing') {
+                        card.innerHTML = `
+                            <p class="font-semibold text-gray-700">Step ${index + 1}. 그림 (by ${creator.name})</p>
+                            <img src="${entry.content}" alt="그림 ${index}" class="mt-2 max-w-full h-auto rounded-lg border border-gray-300">
+                        `;
+                    }
+                    bookDiv.appendChild(card);
+                });
+                container.appendChild(bookDiv);
+            });
+        }
+
+
+        // --- Firestore 액션 함수 ---
+
+        /**
+         * 새로운 방 ID로 방을 생성합니다. (호스트 권한)
+         */
+        async function createRoom(newRoomId) {
+            if (!userId) {
+                showMessage('사용자 ID가 없습니다. 인증 대기 중...', 'warning');
+                return;
+            }
+            try {
+                const tempRoomRef = doc(db, `artifacts/${appId}/public/data/rooms`, newRoomId);
+
+                // 방이 이미 있는지 확인 (트랜잭션 밖에서 가볍게 확인)
+                const docSnap = await getDoc(tempRoomRef);
+                if (docSnap.exists()) {
+                    throw new Error("이미 존재하는 방 ID입니다. 다시 시도해 주세요.");
+                }
+
+                await setDoc(tempRoomRef, {
+                    hostId: userId,
+                    state: 'lobby', // 초기 상태: 로비
+                    currentRound: 0,
+                    users: [],
+                    books: [],
+                    timestamp: Date.now()
+                });
+                
+                // 방 생성 후 해당 방으로 이동 (URL 업데이트)
+                window.history.pushState({}, '', `?room=${newRoomId}`);
+                roomId = newRoomId;
+                showMessage(`새로운 방 ID ${roomId}가 생성되었습니다.`, 'success');
+                
+                setupRoomListener(); // 리스너 설정 및 참여 시도
+
+            } catch (e) {
+                console.error("방 생성 실패:", e);
+                showMessage(`방 생성 실패: ${e.message}`, 'error');
+                showView('select'); // 실패 시 방 선택 화면 유지
+            }
+        }
+
+        /**
+         * 방에 참여하고 사용자 목록에 자신을 추가합니다.
+         */
+        async function joinRoom() {
+            if (!userId || !userName || !roomRef) return;
+
+            const newUser = {
+                id: userId,
+                name: userName,
+                isReady: false
+            };
+
+            // DB에 방이 존재하는지 확인 (리스너가 처리할 것이므로, 여기서는 트랜잭션으로 안전하게 업데이트만 시도)
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) {
+                    // 방이 존재하지 않으면, 현재 사용자가 URL로 접근했고 방장이 아니므로 참여 불가
+                    // (리스너가 이 상황을 감지하고 에러 처리)
+                    return; 
+                }
+
+                const data = roomDoc.data();
+                const users = data.users || [];
+                const existingUser = users.find(u => u.id === userId);
+
+                if (!existingUser) {
+                    transaction.update(roomRef, {
+                        users: arrayUnion(newUser)
+                    });
+                } else if (existingUser.name !== userName) {
+                    // 이름이 바뀌었으면 업데이트
+                    const updatedUsers = users.map(u => u.id === userId ? { ...u, name: userName } : u);
+                    transaction.update(roomRef, { users: updatedUsers });
+                }
+            }).catch(error => {
+                console.error("방 참여/업데이트 실패:", error);
+            });
+        }
+
+        /**
+         * 닉네임을 업데이트하고 방에 저장합니다. (isReady 상태를 true로 만듭니다)
+         */
+        async function updateUserName() {
+            const newName = userNameInput.value.trim();
+            if (!newName) {
+                showMessage('닉네임을 입력해주세요.', 'warning');
+                return;
+            }
+            if (!roomId || !roomRef) {
+                showMessage('먼저 방에 참여하거나 방을 만드세요.', 'error');
+                return;
+            }
+
+            userName = newName;
+            const userDocRef = doc(db, `artifacts/${appId}/users/${userId}/config`, 'profile');
+            await setDoc(userDocRef, { name: userName }); // 로컬 프로필 업데이트
+
+            // 방의 사용자 목록 업데이트 (isReady 상태를 true로 전환)
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) throw "Room does not exist!";
+
+                const data = roomDoc.data();
+                const users = data.users || [];
+                const updatedUsers = users.map(u =>
+                    u.id === userId ? { ...u, name: userName, isReady: true } : u
+                );
+                // 방에 없는 사용자라면 (아주 드문 경우) 추가
+                if (!users.some(u => u.id === userId)) {
+                    updatedUsers.push({ id: userId, name: userName, isReady: true });
+                }
+
+                transaction.update(roomRef, { users: updatedUsers });
+            }).then(() => {
+                showMessage(`닉네임이 ${userName}으로 저장되었고 준비 완료 상태입니다.`, 'success');
+            }).catch(error => {
+                console.error("닉네임 업데이트/준비 상태 실패:", error);
+                showMessage("닉네임 업데이트 중 오류가 발생했습니다.", 'error');
+            });
+        }
+
+        /**
+         * 호스트가 게임을 시작합니다.
+         */
+        async function startGame() {
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) throw "Room does not exist!";
+
+                const data = roomDoc.data();
+                if (data.hostId !== userId) throw "Not the host!";
+                if (data.users.length < 2) throw "Need at least 2 players!";
+
+                transaction.update(roomRef, {
+                    state: 'prompt', // 1단계: 프롬프트 입력
+                    currentRound: 0,
+                    books: [] // 기존 책 초기화
+                });
+            }).catch(error => {
+                console.error("게임 시작 실패:", error);
+                showMessage(`게임 시작 실패: ${error.message}`, 'error');
+            });
+        }
+
+        /**
+         * 사용자의 초기 프롬프트를 제출합니다.
+         */
+        async function submitInitialPrompt() {
+            const prompt = initialPromptInput.value.trim();
+            if (!prompt) return;
+
+            const bookEntry = {
+                starterId: userId,
+                starterName: userName,
+                chain: [{
+                    round: 0,
+                    type: 'text',
+                    content: prompt,
+                    creatorId: userId
+                }]
+            };
+
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) throw "Room does not exist!";
+
+                const data = roomDoc.data();
+                if (data.state !== 'prompt') throw "게임 상태가 'prompt'가 아닙니다.";
+
+                // 이미 제출했는지 다시 확인
+                if (data.books.some(b => b.starterId === userId)) throw "이미 문장을 제출했습니다.";
+
+                // 트랜잭션에서 배열 업데이트
+                const newBooks = [...data.books, bookEntry];
+                
+                // 모든 플레이어가 프롬프트를 제출했는지 확인
+                const allSubmitted = newBooks.length === data.users.length;
+                
+                const updatePayload = {
+                    books: newBooks
+                };
+                
+                if (allSubmitted) {
+                    updatePayload.currentRound = 1;
+                    updatePayload.state = 'drawing'; // 다음 라운드는 그림 그리기
+                }
+
+                transaction.update(roomRef, updatePayload);
+            }).then(() => {
+                showMessage('문장이 성공적으로 제출되었습니다. 다음 단계를 기다립니다.', 'success');
+                submitPromptBtn.disabled = true;
+                submitPromptBtn.textContent = "문장 제출 완료 (대기 중)";
+                initialPromptInput.disabled = true;
+            }).catch(error => {
+                console.error("프롬프트 제출 실패:", error);
+                showMessage(`프롬프트 제출 실패: ${error.message}`, 'error');
+            });
+        }
+
+
+        /**
+         * 라운드 작업을 제출합니다 (그림 또는 추측).
+         * @param {string} type - 'drawing' 또는 'guessing'
+         * @param {string} content - 그림(base64) 또는 추측 문장
+         */
+        async function submitRoundTask(type, content) {
+            if (!content || !roomRef) return;
+
+            await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) throw "Room does not exist!";
+
+                const data = roomDoc.data();
+                const { users, currentRound, books } = data;
+                const userIds = users.map(u => u.id);
+                const userIndex = userIds.indexOf(userId);
+
+                if (userIndex === -1) throw "방에 참여하지 않았습니다.";
+
+                // 할당된 책 찾기 (책은 currentRound만큼 인덱스가 밀립니다)
+                const targetBookStarterIndex = (userIndex - currentRound + userIds.length) % userIds.length;
+                const targetStarterId = userIds[targetBookStarterIndex];
+
+                const bookIndex = books.findIndex(b => b.starterId === targetStarterId);
+                if (bookIndex === -1) throw "할당된 책을 찾을 수 없습니다.";
+
+                const targetBook = books[bookIndex];
+
+                // 제출된 항목이 이미 있는지 확인 (currentRound + 1은 현재 책의 체인 길이)
+                if (targetBook.chain.length === currentRound + 1) throw "이미 이 라운드를 제출했습니다.";
+
+                const newEntry = {
+                    round: currentRound + 1,
+                    type: type,
+                    content: content,
+                    creatorId: userId,
+                    basedOnRound: currentRound
+                };
+
+                // 새 체인 항목 추가
+                targetBook.chain.push(newEntry);
+
+                // 전체 제출 완료 확인
+                const allSubmitted = books.every((b, i) => (i === bookIndex ? targetBook : b).chain.length === currentRound + 2); // 내가 제출한 항목이 포함되어 체인 길이가 currentRound + 2가 됨
+
+                const updatePayload = {
+                    books: books.map((b, i) => i === bookIndex ? targetBook : b)
+                };
+
+                // 모든 플레이어가 제출했으면 다음 라운드로 진행
+                if (allSubmitted) {
+                    const nextRound = currentRound + 1;
+                    const totalSteps = users.length; // 총 라운드 수 (프롬프트 포함 총 단계 수)
+
+                    if (nextRound === totalSteps) {
+                        // 모든 단계 완료 -> 결과 발표
+                        updatePayload.state = 'reveal';
+                    } else {
+                        updatePayload.currentRound = nextRound;
+                        // 라운드 0: text, 라운드 1: drawing, 라운드 2: guessing, 라운드 3: drawing...
+                        // 현재 라운드가 홀수(1, 3, 5...)면 다음은 'guessing' (텍스트를 입력)
+                        // 현재 라운드가 짝수(2, 4, 6...)면 다음은 'drawing' (그림을 입력)
+                        // 프롬프트는 라운드 0, 텍스트가 들어있음.
+                        // 라운드 1 (현재): type drawing -> 다음은 guessing
+                        // 라운드 2 (현재): type guessing -> 다음은 drawing
+                        const nextState = (nextRound % 2 === 1) ? 'guessing' : 'drawing';
+                        updatePayload.state = nextState;
+                    }
+                }
+
+                transaction.update(roomRef, updatePayload);
+
+            }).then(() => {
+                showMessage('작업이 성공적으로 제출되었습니다. 다음 단계를 기다리세요.', 'success');
+            }).catch(error => {
+                console.error("라운드 작업 제출 실패:", error);
+                showMessage(`제출 실패: ${error.message}`, 'error');
+            });
+        }
+
+        /**
+         * 게임을 초기화하고 로비로 돌아갑니다. (호스트 전용)
+         */
+        async function startNewGame() {
+             await runTransaction(db, async (transaction) => {
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists()) throw "Room does not exist!";
+
+                const data = roomDoc.data();
+                if (data.hostId !== userId) throw "Not the host!";
+
+                // 모든 사용자의 isReady를 false로 초기화
+                const resetUsers = data.users.map(u => ({...u, isReady: false}));
+
+                transaction.update(roomRef, {
+                    state: 'lobby',
+                    currentRound: 0,
+                    books: [],
+                    users: resetUsers // 사용자 목록 초기화
+                });
+            }).then(() => {
+                showMessage('게임이 초기화되었습니다. 로비에서 다시 준비하세요.', 'info');
+            }).catch(error => {
+                console.error("게임 초기화 실패:", error);
+                showMessage(`게임 초기화 실패: ${error.message}`, 'error');
+            });
+        }
+        
+        // --- 새로운 기능 관련 이벤트 핸들러 ---
+        
+        /**
+         * 새로운 방을 만들고 해당 방으로 이동합니다.
+         */
+        function handleCreateRoom() {
+            const newRoomId = createUniqueRoomId();
+            createRoom(newRoomId);
+        }
+
+        /**
+         * 입력된 방 ID로 참여를 시도합니다.
+         */
+        function handleJoinRoom() {
+            const inputId = joinRoomIdInput.value.trim().toUpperCase();
+            if (!inputId) {
+                showMessage('방 ID를 입력해주세요.', 'warning');
+                return;
+            }
+            // URL을 업데이트하여 리스너가 새 방으로 이동하도록 트리거
+            window.history.pushState({}, '', `?room=${inputId}`);
+            roomId = inputId;
+            showMessage(`방 ID ${roomId}로 접속 시도 중...`, 'info');
+            setupRoomListener();
+        }
+
+        /**
+         * 참여 링크를 클립보드에 복사합니다.
+         */
+        function copyLinkToClipboard() {
+            const link = roomLinkInput.value;
+            // execCommand는 보안 제약으로 인해 navigator.clipboard 대신 사용
+            try {
+                const tempInput = document.createElement('input');
+                tempInput.value = link;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                showMessage('🔗 참여 링크가 클립보드에 복사되었습니다!', 'success');
+            } catch (err) {
+                console.error('클립보드 복사 실패:', err);
+                showMessage('링크 복사 실패: 수동으로 복사해주세요.', 'error');
+            }
+        }
+
+
+        // --- 이벤트 리스너 등록 ---
+
+        window.onload = initializeFirebase;
+
+        // 방 선택 뷰 이벤트
+        createRoomBtn.addEventListener('click', handleCreateRoom);
+        joinRoomBtn.addEventListener('click', handleJoinRoom);
+        joinRoomIdInput.addEventListener('input', (e) => {
+            joinRoomBtn.disabled = e.target.value.trim().length === 0;
+            e.target.value = e.target.value.toUpperCase(); // 방 ID는 대문자로 통일
+        });
+        
+        // 로비 뷰 이벤트
+        copyLinkBtn.addEventListener('click', copyLinkToClipboard);
+        setUserNameBtn.addEventListener('click', updateUserName);
+        startGameBtn.addEventListener('click', startGame);
+
+        // 게임 뷰 이벤트
+        initialPromptInput.addEventListener('input', (e) => {
+            submitPromptBtn.disabled = e.target.value.trim().length === 0;
+        });
+        submitPromptBtn.addEventListener('click', submitInitialPrompt);
+
+        submitDrawingBtn.addEventListener('click', () => {
+            const drawingDataUrl = getCanvasImage();
+            submitRoundTask('text', drawingDataUrl); // 그림 제출 다음 단계는 'text' 타입의 추측
+        });
+
+        guessInput.addEventListener('input', (e) => {
+            submitGuessBtn.disabled = e.target.value.trim().length === 0;
+        });
+        submitGuessBtn.addEventListener('click', () => {
+            const guess = guessInput.value.trim();
+            submitRoundTask('drawing', guess); // 추측 제출 다음 단계는 'drawing' 타입의 그림
+            guessInput.value = ''; // 제출 후 입력 필드 초기화
+        });
+
+        newGameBtn.addEventListener('click', startNewGame);
+    </script>
+</body>
+</html>
